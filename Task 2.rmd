@@ -1,0 +1,78 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# **Graduate Rotational Internship Program (The Spark Foundation)**
+# TASK 2 (To Explore Supervised Machine Learning)
+
+First let us start with importing required libraries and data.
+PS: please set your current directory to the location where your data-set is, by using setwd("").
+
+```{r}
+#Loading libraries
+library(tidyverse)
+library(caret)
+library(ggplot2)
+
+#reading data from the URL
+data <- read.csv(url("https://raw.githubusercontent.com/AdiPersonalWorks/Random/master/student_scores%20-%20student_scores.csv"))
+```
+
+We have to predict the percentage of marks that a student is expected to score based upon the number of hours they studied.
+
+Let's first observe our data.
+
+```{r}
+#getting the summary of the data
+summary(data)
+```
+
+So there are no *NA* values.
+
+Now, let's visualize our data.
+
+```{r}
+#plotting the data
+data %>% ggplot(., aes(Hours, Scores)) + geom_point(size = 3) + scale_x_continuous(breaks = c(0:10)) + 
+  scale_y_continuous(n.breaks = 10) +  theme_classic()
+```
+
+It is clearly visible that both variables are positively correlated (cor(Hours, Scores) = `r cor(data$Hours, data$Scores)`). We can easily fit a linear model to the data.
+
+Before fitting the regression let's split the data into training and test set.
+
+```{r}
+#splitting the data into the training and test set
+set.seed(122, sample.kind = "Rounding")
+test_index <- createDataPartition(data$Scores, times = 1, p = 0.3, list = FALSE)
+train_set <- data[-test_index, ]
+test_set <- data[test_index, ]
+```
+
+Now, fitting linear regression to the data, and predicting the model on the test set.
+
+```{r}
+#fitting linear reg.
+fit <- lm(data = train_set, formula = Scores ~.)
+summary(fit)
+pred <- predict(fit, test_set)
+```
+
+We are getting the goodness of fit as 0.9539 or we can say that our model has explained 95.39% of the variation in the percentage of marks scored is explained by the no. hours a student is studying, with a root mean square error of `r RMSE(pred, test_set$Scores)`
+
+Visualizig our fit.
+
+``` {r}
+plot(data, main = "Regression Plot")
+abline(fit, col = "dark red")
+```
+
+Determining the percentage of marks obtained by studying for 9.25 hours.
+
+```{r}
+p <- data.frame(Hours = 9.25, Scores = "")
+predict(fit, p)
+```
+
+So the predicted score is `r predict(fit, p)`.

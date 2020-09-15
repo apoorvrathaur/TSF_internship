@@ -1,0 +1,229 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# **Graduate Rotational Internship Program (The Spark Foundation)**
+# TASK 4 (To Explore Supervised Machine Learning)
+
+
+First let us start with importing required libraries and data.
+PS: please set your current directory to the location where your data-set is, by using setwd("").
+
+```{r}
+#Loading libraries
+library(tidyverse)
+library(caret)
+library(corrplot)
+library(rpart.plot)
+library(randomForest)
+
+#importing data
+data <- read.csv("Iris.csv", stringsAsFactors = TRUE)
+head(data) %>% as.tibble()
+```
+
+## Exploratory Data Analysis
+
+Let go through the summary of our data
+```{r}
+summary(data) 
+```
+
+We have no *NA* values present, and there is an extra column (ID), we can remove it as row numbering is already present in a data frame which can act as ID column.
+
+```{r}
+#removing redundant column
+data <- data[, -1]
+head(data) %>% as.tibble()
+```
+
+Checking for the deviation in data from the mean.
+```{r}
+#checking for standard deviations
+sapply(data[, 1:4], sd)
+```
+
+Now since the data vary differently around the mean let us standardize the data.
+```{r}
+#removing the factor column and standardizing the data
+scaled_data <- as.data.frame(scale(data[, 1:4]))
+summary(scaled_data)
+sapply(scaled_data, sd)
+scaled_data$Species <- data$Species # adding back the Species column
+```
+
+Splitting the data into the training and test set
+
+```{r}
+set.seed(6, sample.kind = "Rounding")
+test_index <- createDataPartition(scaled_data$Species, times = 1, p = 0.3, list = FALSE)
+train_set <- scaled_data[-test_index, ]
+test_set <- scaled_data[test_index, ]
+```
+
+Now, plotting density plot of all variables
+```{r}
+#Visualizing data
+par(mfrow = c(2,2)) #to split screen into 4 segments
+for (i in 1:4) {
+  hist(scaled_data[,i], probability = TRUE, main = names(scaled_data[i]), xlab = names(scaled_data[i]))
+  lines(density(scaled_data[,i]))
+}
+```
+
+Notice the shape of the data, most attributes exhibit a normal distribution.
+Let's check, how much correlated the predictors actually are?
+
+```{r}
+#Checking the correlation between the predictors
+col <- sapply(data,is.numeric)
+cor.data <- cor(data[,col])
+corrplot(cor.data, method = "number", type = "upper")
+```
+
+It's clear PetalLength and PetalWidth are the most correlated pair.
+
+```{r}
+#plotting the standardized data grouped by the Species class
+pairs(scaled_data[1:4], main = "Scatter Plot", pch = 21, bg = c("red", "green3", "blue")
+   [unclass(scaled_data$Species)], lower.panel=NULL, labels=c("SL","SW","PL","PW"), font.labels=2, cex.labels=4.5)
+```
+
+Notice that in graphs vs PetalWidth or PetalLength there are less overlapping points as compared to SepalLength vs SepalWidth. This implies PetalLength and PetalWidth contributes more in classifying the Species labels as compared to other predictors.
+
+## Building Algotrithm
+
+We will be using decision tree to classify the species, but there are other methods you can also use, like knn, svm, naive bayes classifier, logistic regression, etc.
+
+So for decision tree we use rpart() function available in rpart package. Let's look for the parameters in the raprt().
+
+```{r}
+modelLookup("rpart")
+```
+
+We will tune complexity parameter (cp) through bootstrapping to get the optimal value for our data.
+
+```{r}
+#performing bootstrapping
+train_rpart <- train(Species ~., method = "rpart",
+                     tuneGrid = data.frame(cp = seq(0, 0.5, 50)),
+                     data = train_set)
+train_rpart
+```
+
+So our best value for cp is 0.
+Also let look at the variable importance.
+
+```{r}
+varImp(train_rpart)
+```
+
+As per our previous deduction PetalWidth and PetalLength have high variable importance.
+Also there is another parameter for minimum splits to be considered (minsplit) in rpart() we need to optimize to get the highest accuracy possible.
+
+```{r}
+
+#checking accuracy based on minimum split for our tree
+B <- seq(5, 50, 1)
+M <- map_dbl(B, function(B){
+  fit_rpart <- rpart(Species ~., data = train_set, control = rpart.control(cp = 0, minsplit = B), method = "class")
+  y_hat <- predict(fit_rpart, test_set, type = "class")
+  confusionMatrix(factor(y_hat), reference = factor(test_set$Species))$overall["Accuracy"]
+})
+Ms <- data.frame(minsplit = seq(5, 50, 1), Acc. = M)
+Ms
+```
+
+Note that if we use 16 minsplit it might overfit our data so we choose minsplit to be above 16 as the accuracy is constant after that. Since rpart uses minsplit = 20 as default value we leave that as it is.
+
+```{r}
+#finally building our decision tree with cp = 0
+fit_rpart <- rpart(Species ~., data = train_set, control = rpart.control(cp = 0),
+                   method = "class")
+printcp(fit_rpart) #to print insights of our fit
+```
+
+Checking how good our model has done, using confusion matrix.
+
+```{r}
+confusionMatrix(factor(predict(fit_rpart, train_set, type = "class")), reference = factor(train_set$Species))
+```
+
+Now predicting results over the test set..
+
+```{r}
+y_hat <- predict(fit_rpart, test_set, type = "class")
+```
+
+Checking how good our model has done, using confusion matrix.
+
+```{r}
+confusionMatrix(factor(y_hat), reference = factor(test_set$Species))
+```
+
+It has predict *95.56%* of the data correctly
+
+Visualizing our formred tree.
+```{r}
+rpart.plot(fit_rpart, type = 2, extra = 104, nn = T)
+```
+
+Not a bad result, let see if we can improve our performance.
+We will now perform bagging.
+
+Using Random Forest.
+So for random forest we use rndomForest() function available in randomForest package. Let's look for the parameters.
+
+```{r}
+modelLookup("rf")
+```
+
+We will tune mtry through 10-fold cross validation to get the optimal value for our data.
+
+```{r}
+#performing bootstrapping
+set.seed(6, sample.kind = "Rounding")
+control <- trainControl(method="repeatedcv", number = 10, repeats = 3)
+train_rf <-  train(Species~., data = train_set,
+                   method = "rf", 
+                   tuneGrid = data.frame(mtry = c(1:15)),
+                   trControl = control)
+train_rf
+```
+
+So our optimal value for mtry is 2.
+We can visuallize our result as follows:
+
+```{r}
+plot(train_rf)
+```
+
+```{r}
+#building our model with mtry = 2
+set.seed(6, sample.kind = "Rounding")
+fit_rf <- randomForest(Species~., data = train_set, mtry = 2, ntree = 250)
+plot(fit_rf, main = "Plot for ntree")
+```
+
+Reason for choosing ntree = 250 is that, after 250 the error remain constant
+Predicting results over the test set..
+
+```{r}
+y_hat_rf <- predict(fit_rf, test_set, type = "class")
+```
+
+Checking how good our model has done, using confusion matrix.
+
+```{r}
+confusionMatrix(factor(y_hat_rf), reference = factor(test_set$Species))
+```
+
+Our accuracy has immproved to *97.78%*.
+
+Checking importance of the variables used
+```{r}
+varImp(fit_rf)
+```
+
+As we said above PetalWidth and PetalLength have high variable importance.

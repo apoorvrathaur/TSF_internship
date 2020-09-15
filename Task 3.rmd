@@ -1,0 +1,146 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# **Graduate Rotational Internship Program (The Spark Foundation)**
+# TASK 3 (To Explore Supervised Machine Learning)
+
+
+First let us start with importing required libraries and data.
+PS: please set your current directory to the location where your data-set is, by using setwd("").
+
+```{r}
+#Loading libraries
+library(tidyverse)
+library(caret)
+library(cluster)
+
+#importing data
+data <- read.csv("Iris.csv", stringsAsFactors = TRUE)
+head(data) %>% as.tibble()
+```
+
+## Exploratory Data Analysis
+
+Let go through the summary of our data
+```{r} 
+summary(data) 
+```
+
+We have no *NA* values present, and there is an extra column (ID), we can remove it as row numbering is already present in a data frame which can act as ID column.
+
+```{r}
+#removing redundant column
+data <- data[, -1]
+head(data) %>% as.tibble()
+```
+
+Checking for the deviation in data from the mean.
+```{r}
+#checking for standard deviations
+sapply(data[, 1:4], sd)
+```
+
+Now since the data vary differently around the mean let us standardize the data.
+```{r}
+#removing the factor column and standardizing the data
+scaled_data <- as.data.frame(scale(data[, 1:4]))
+summary(scaled_data)
+sapply(scaled_data, sd)
+```
+
+Now, plotting density plot of all variables
+
+```{r}
+#Visualizing data
+par(mfrow = c(2,2)) #to split screen into 4 segments
+for (i in 1:4) {
+  hist(scaled_data[,i], probability = TRUE, main = names(scaled_data[i]), xlab = names(scaled_data[i]))
+  lines(density(scaled_data[,i]))
+}
+```
+
+Notice the shape of the data, most attributes exhibit a normal distribution. 
+
+Now, let's visualize the scatter plot
+
+```{r}
+par(mfrow = c(2,2))
+for (i in 1:4) {
+  plot(scaled_data[,i], main = names(scaled_data[i]), ylab = names(scaled_data[i]))
+}
+```
+
+We can clearly see that, the data point can be grouped
+
+## Building Algorithm
+We will first use kmeans for clustering
+Since kmeans uses k (no. of clusters) as a parameter, so let's first find an optimal value for k.
+
+```{r}
+par(mfrow = c(1,1))
+#using Elbow method.
+library(factoextra)
+fviz_nbclust(scaled_data, method = "wss", k.max = 10, FUNcluster = kmeans, linecolor = "darkgreen")
+```
+
+We can observe after 3, the wss is not changing much, hence our optimal no. of clusters (k) are 3.
+
+Applying kmeans.
+
+```{r}
+#Now clustering our data using k=3
+set.seed(122, sample.kind = "Rounding")
+clust <- kmeans(scaled_data, centers = 3) #centers corresponds to the no. of clusters
+```
+
+Centers of our clusters 
+```{r} 
+clust$centers
+```
+
+Clusters formed
+```{r} 
+table(clust$cluster) 
+```
+
+
+Plotting the max variability explaining components
+
+```{r}
+clusplot(scaled_data, clust$cluster, color=TRUE, shade=TRUE,  lines=1, main = "Cluster Plot")
+```
+
+Now, let's compare our results with hierarchical clustering.
+Since hcut() (function for hierarchical clustering) also uses k (no. of clusters) as a parameter, so let's find an optimal value for k.
+
+```{r}
+#Using gap statistics
+set.seed(123, sample.kind = "Rounding")
+gap_stat <- clusGap(scaled_data, FUN = hcut, nstart = 30,
+                    K.max = 10, B = 100)
+print(gap_stat, method = "firstmax")
+```
+
+We get our optimal no. of clusters (k) as 3.
+
+Applying hierarchical clustering.
+
+```{r}
+#Clustering our data using k=3
+h_clust <- hcut(scaled_data,k = 3, stand = TRUE, graph = TRUE)
+```
+
+Plotting dendogram.
+
+```{r}
+fviz_dend(h_clust, rect = TRUE)
+```
+
+Plotting scatter plot
+
+```{r}
+fviz_cluster(h_clust) #for scatterplot
+
+```
